@@ -1,4 +1,4 @@
-Introduction
+**Introduction**
 
 RealRaymarchedRadar is exactly what it sounds like: a simulated radar which uses raymarching to sample the density of clouds along its beam. This provides an actual live weather radar for Kerbal Space Program! It is just a weather radar at this time and is not intended to detect terrain or other vehicles. It is in an alpha state and I am still working on reducing the number of artifacts and testing its performance over long periods.
 
@@ -46,7 +46,7 @@ It is performant and robust across long playtimes and physical timewarps. There 
 
 
 
-Alpha Testing
+**Alpha Testing**
 
 I am still working on this one, but I was too excited not to share! In this alpha test, I am working on some of the following features and would happily accept any input or assistance on improving this mod:
 
@@ -76,7 +76,7 @@ Testing compatibility on different planets/planet packs
 
 
 
-Installation
+**Installation**
 
 Requires EVE Redux and any volumetric clouds config. Remove old versions prior to updating. Extract and merge GameData with your existing folder.
 
@@ -84,15 +84,15 @@ Requires EVE Redux and any volumetric clouds config. Remove old versions prior t
 
 
 
-License & AI Usage
+**License & AI Usage**
 
-RealRaymarchedRadar is fully free and open under a CC0-1.0 license. AI was used for some coding and editing as part of this mod. This forum post is fully human-written.
-
-
+RealRaymarchedRadar is fully free and open under a CC0-1.0 license. AI was used for some coding and editing as part of this mod. This readme is fully human-written.
 
 
 
-Credits
+
+
+**Credits**
 
 
 
@@ -108,6 +108,6 @@ Aebestach for the awesome WeatherDrivenSolarPanel and the idea of using raymarch
 
 
 
-Issues
+**Issues**
 
 Please report any issues on GitHub with your KSP log and a short description.

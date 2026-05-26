@@ -40,6 +40,8 @@ namespace KerbalWeatherRadar
         private bool isOn = true;
         private bool isGlobalMode = true;
         private bool isLongRange = false;
+        private float cutoffHorizAlt = 2000f;
+        private float cutoffDownAlt = 3000f;
 
         private float currentSweepAngle = 0f;
         private float lastDrawAngle = 0f;
@@ -106,6 +108,8 @@ namespace KerbalWeatherRadar
                 TryParseFloat(n, "sweepSpeedShort", ref sweepSpeedShort);
                 TryParseFloat(n, "sweepSpeedLong", ref sweepSpeedLong);
                 TryParseFloat(n, "sweepResolution", ref sweepResolution);
+                TryParseFloat(n, "cutoffHorizAlt", ref cutoffHorizAlt);
+                TryParseFloat(n, "cutoffDownAlt", ref cutoffDownAlt);
 
                 Debug.Log($"[KerbalWeatherRadar] Config loaded. Ranges: {shortRange}/{longRange}m. Angles: {lowRangeAngle}/{highRangeAngle}deg.");
             }
@@ -285,8 +289,13 @@ namespace KerbalWeatherRadar
 
             float stepSize = maxRange / numSteps;
 
-            // Don't sample points below ground level.
+            // Don't sample points below sea level.
             float bodyRadiusSq = (float)(v.mainBody.Radius * v.mainBody.Radius);
+
+            // CHEAP AND CHEERFUL FIX: Disable beams near the ground to avoid terrain clipping
+            double currentAlt = v.altitude;
+            bool enableHoriz = currentAlt >= 2000.0;
+            bool enableDown = currentAlt >= 3000.0;
 
             for (int i = 0; i < numSteps; i++)
             {
@@ -297,15 +306,17 @@ namespace KerbalWeatherRadar
                 Vector3 sU = craftPos + beamUp * dist;
                 Vector3 sD = craftPos + beamDown * dist;
 
-                bool val0 = (s0 - center).sqrMagnitude > bodyRadiusSq;
+                // Apply the altitude gate to the horizontal and downward beams
+                bool val0 = enableHoriz && (s0 - center).sqrMagnitude > bodyRadiusSq;
                 bool valU = (sU - center).sqrMagnitude > bodyRadiusSq;
-                bool valD = (sD - center).sqrMagnitude > bodyRadiusSq;
+                bool valD = enableDown && (sD - center).sqrMagnitude > bodyRadiusSq;
 
                 for (int vIdx = 0; vIdx < cachedVolumes.Count; vIdx++)
                 {
                     var vol = cachedVolumes[vIdx];
-                    if (vol == null) continue; // Safety check in case volume is destroyed between 2s ticks
+                    if (vol == null) continue;
 
+                    // If val0 is false, it skips sampling and maxD remains 0
                     if (val0)
                     {
                         float c = vol.SampleCoverage(s0, out float _, false);

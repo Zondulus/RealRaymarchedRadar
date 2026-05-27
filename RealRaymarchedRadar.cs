@@ -13,20 +13,20 @@ namespace KerbalWeatherRadar
         // --- Configuration ---
         private float shortRange = 10000f;
         private float longRange = 20000f;
-        private float lowRangeAngle = 10f;  // Vertical beam angle at short range
-        private float highRangeAngle = 5f;  // Vertical beam angle at long range
+        private float lowRangeAngle = 10f;
+        private float highRangeAngle = 5f;
         private float radarThreshold = 0.01f;
         private float baseColorMultiplier = 1.5f;
         private int radarSteps = 50;
         private float sweepSpeedShort = 120f;
         private float sweepSpeedLong = 60f;
-        private float sweepResolution = 0.5f; // Degrees between sweep rays
+        private float sweepResolution = 0.5f;
 
         // --- UI & AppLauncher ---
         private ApplicationLauncherButton appLauncherButton;
         private bool showUI = false;
-        private bool uiHidden = false; // Issue 2: F2 UI Toggle state
-        private Rect windowRect = new Rect(200, 200, 280, 360);
+        private bool uiHidden = false; // F2 UI Toggle state
+        private Rect windowRect = new Rect(200, 200, 280, 20);
         private GUIStyle richButtonStyle;
 
         // --- Radar Display ---
@@ -119,7 +119,7 @@ namespace KerbalWeatherRadar
         private void OnShowUI() { uiHidden = false; }
         private void OnSceneChange(GameScenes scene)
         {
-            // Issue 1: Fix CTD by halting loops & dropping native volume objects safely before the scene is destroyed 
+            // Avoid CTD by halting loops & dropping native volume objects safely before the scene is destroyed 
             showUI = false;
             cachedVolumes.Clear();
         }
@@ -322,7 +322,7 @@ namespace KerbalWeatherRadar
             // Don't sample points below sea level.
             float bodyRadiusSq = (float)(v.mainBody.Radius * v.mainBody.Radius);
 
-            // CHEAP AND CHEERFUL FIX: Disable beams near the ground to avoid terrain clipping
+            // Disable beams near the ground to avoid terrain clipping
             double currentAlt = v.altitude;
             bool enableHoriz = currentAlt >= cutoffHorizAlt;
             bool enableDown = currentAlt >= cutoffDownAlt;
@@ -446,13 +446,13 @@ namespace KerbalWeatherRadar
         // --- GUI Rendering ---
         public void OnGUI()
         {
-            // Issue 2: Checks both standard toggle and the F2 hide button states
+            // Checks both standard toggle and the F2 hide button states
             if (showUI && !uiHidden)
             {
                 GUI.skin = HighLogic.Skin;
                 windowRect = GUILayout.Window(854124, windowRect, DrawWindow, "Weather Radar");
 
-                // Issue 3: Constraint to keep the window trapped inside the boundaries of the user's resolution
+                // Constraint to keep the window trapped inside the boundaries of the user's resolution
                 windowRect.x = Mathf.Clamp(windowRect.x, 0, Screen.width - windowRect.width);
                 windowRect.y = Mathf.Clamp(windowRect.y, 0, Screen.height - windowRect.height);
             }
@@ -470,7 +470,7 @@ namespace KerbalWeatherRadar
 
             GUILayout.BeginHorizontal();
 
-            // Lazy initialization of our text-format friendly button style to prevent unnecessary garbage collection per frame
+            // Lazy initialization of button style to prevent unnecessary garbage collection per frame
             if (richButtonStyle == null)
             {
                 richButtonStyle = new GUIStyle(GUI.skin.button) { richText = true };

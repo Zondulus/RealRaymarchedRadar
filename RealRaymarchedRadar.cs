@@ -25,6 +25,7 @@ namespace KerbalWeatherRadar
         // --- UI & AppLauncher ---
         private ApplicationLauncherButton appLauncherButton;
         private bool showUI = false;
+        private bool uiHidden = false; // Issue 2: F2 UI Toggle state
         private Rect windowRect = new Rect(200, 200, 280, 360);
         private GUIStyle richButtonStyle;
 
@@ -83,17 +84,44 @@ namespace KerbalWeatherRadar
             densitiesBuffer = new float[radarSteps];
             UpdateVolumesList(); // Initial population
 
-            // 3. Hook into Toolbar
+            // 3. Hook into Toolbar & GameEvents
             GameEvents.onGUIApplicationLauncherReady.Add(AddToolbarButton);
             GameEvents.onGUIApplicationLauncherDestroyed.Add(RemoveToolbarButton);
+            GameEvents.onHideUI.Add(OnHideUI);
+            GameEvents.onShowUI.Add(OnShowUI);
+            GameEvents.onGameSceneLoadRequested.Add(OnSceneChange);
         }
 
         public void OnDestroy()
         {
+            // Shut off operations to safely tear down caches
+            showUI = false;
+
             GameEvents.onGUIApplicationLauncherReady.Remove(AddToolbarButton);
             GameEvents.onGUIApplicationLauncherDestroyed.Remove(RemoveToolbarButton);
+            GameEvents.onHideUI.Remove(OnHideUI);
+            GameEvents.onShowUI.Remove(OnShowUI);
+            GameEvents.onGameSceneLoadRequested.Remove(OnSceneChange);
+
             RemoveToolbarButton();
-            if (radarTexture != null) Destroy(radarTexture);
+
+            if (radarTexture != null)
+            {
+                Destroy(radarTexture);
+                radarTexture = null;
+            }
+
+            cachedVolumes.Clear();
+        }
+
+        // --- Event Listeners ---
+        private void OnHideUI() { uiHidden = true; }
+        private void OnShowUI() { uiHidden = false; }
+        private void OnSceneChange(GameScenes scene)
+        {
+            // Issue 1: Fix CTD by halting loops & dropping native volume objects safely before the scene is destroyed 
+            showUI = false;
+            cachedVolumes.Clear();
         }
 
         private void LoadConfig()
@@ -136,9 +164,13 @@ namespace KerbalWeatherRadar
 
         private void RemoveToolbarButton()
         {
+            // Prevent attempting to access the AppLauncher if it is already destroyed/shutting down
             if (appLauncherButton != null)
             {
-                ApplicationLauncher.Instance.RemoveModApplication(appLauncherButton);
+                if (ApplicationLauncher.Instance != null)
+                {
+                    ApplicationLauncher.Instance.RemoveModApplication(appLauncherButton);
+                }
                 appLauncherButton = null;
             }
         }
@@ -414,10 +446,15 @@ namespace KerbalWeatherRadar
         // --- GUI Rendering ---
         public void OnGUI()
         {
-            if (showUI)
+            // Issue 2: Checks both standard toggle and the F2 hide button states
+            if (showUI && !uiHidden)
             {
                 GUI.skin = HighLogic.Skin;
                 windowRect = GUILayout.Window(854124, windowRect, DrawWindow, "Weather Radar");
+
+                // Issue 3: Constraint to keep the window trapped inside the boundaries of the user's resolution
+                windowRect.x = Mathf.Clamp(windowRect.x, 0, Screen.width - windowRect.width);
+                windowRect.y = Mathf.Clamp(windowRect.y, 0, Screen.height - windowRect.height);
             }
         }
 

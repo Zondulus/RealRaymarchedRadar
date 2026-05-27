@@ -12,11 +12,11 @@ namespace KerbalWeatherRadar
     {
         // --- Configuration ---
         private float shortRange = 10000f;
-        private float longRange = 30000f;
+        private float longRange = 20000f;
         private float lowRangeAngle = 10f;  // Vertical beam angle at short range
         private float highRangeAngle = 5f;  // Vertical beam angle at long range
-        private float radarThreshold = 0.02f;
-        private float colorMultiplier = 2.5f;
+        private float radarThreshold = 0.01f;
+        private float baseColorMultiplier = 1.5f;
         private int radarSteps = 50;
         private float sweepSpeedShort = 120f;
         private float sweepSpeedLong = 60f;
@@ -26,6 +26,7 @@ namespace KerbalWeatherRadar
         private ApplicationLauncherButton appLauncherButton;
         private bool showUI = false;
         private Rect windowRect = new Rect(200, 200, 280, 360);
+        private GUIStyle richButtonStyle;
 
         // --- Radar Display ---
         private Texture2D radarTexture;
@@ -37,11 +38,13 @@ namespace KerbalWeatherRadar
         private Color32 overlayColor = new Color32(51, 51, 51, 255);
 
         // --- Radar State ---
-        private bool isOn = true;
         private bool isGlobalMode = true;
         private bool isLongRange = false;
         private float cutoffHorizAlt = 2000f;
         private float cutoffDownAlt = 3000f;
+
+        private int gainState = 0; // 0 = Med, 1 = Hi, 2 = Lo
+        private float currentColorMultiplier = 1.5f;
 
         private float currentSweepAngle = 0f;
         private float lastDrawAngle = 0f;
@@ -56,6 +59,7 @@ namespace KerbalWeatherRadar
         public void Start()
         {
             LoadConfig();
+            currentColorMultiplier = baseColorMultiplier;
 
             // Prevent division by zero if configured poorly
             sweepResolution = Mathf.Max(0.1f, sweepResolution);
@@ -103,7 +107,7 @@ namespace KerbalWeatherRadar
                 TryParseFloat(n, "lowRangeAngle", ref lowRangeAngle);
                 TryParseFloat(n, "highRangeAngle", ref highRangeAngle);
                 TryParseFloat(n, "radarThreshold", ref radarThreshold);
-                TryParseFloat(n, "colorMultiplier", ref colorMultiplier);
+                TryParseFloat(n, "colorMultiplier", ref baseColorMultiplier);
                 TryParseInt(n, "radarSteps", ref radarSteps);
                 TryParseFloat(n, "sweepSpeedShort", ref sweepSpeedShort);
                 TryParseFloat(n, "sweepSpeedLong", ref sweepSpeedLong);
@@ -161,19 +165,16 @@ namespace KerbalWeatherRadar
                 float dt = Mathf.Min(lastUpdateTimer, 0.1f);
                 float sweepSpeed = isLongRange ? sweepSpeedLong : sweepSpeedShort;
 
-                if (isOn)
+                if (isGlobalMode)
                 {
-                    if (isGlobalMode)
-                    {
-                        currentSweepAngle += sweepSpeed * dt;
-                        currentSweepAngle = Mathf.Repeat(currentSweepAngle, 360f);
-                    }
-                    else
-                    {
-                        currentSweepAngle += sweepSpeed * sweepDirection * dt;
-                        if (currentSweepAngle >= 60f) { currentSweepAngle = 60f; sweepDirection = -1f; }
-                        else if (currentSweepAngle <= -60f) { currentSweepAngle = -60f; sweepDirection = 1f; }
-                    }
+                    currentSweepAngle += sweepSpeed * dt;
+                    currentSweepAngle = Mathf.Repeat(currentSweepAngle, 360f);
+                }
+                else
+                {
+                    currentSweepAngle += sweepSpeed * sweepDirection * dt;
+                    if (currentSweepAngle >= 60f) { currentSweepAngle = 60f; sweepDirection = -1f; }
+                    else if (currentSweepAngle <= -60f) { currentSweepAngle = -60f; sweepDirection = 1f; }
                 }
 
                 UpdateRadarTexture(sweepSpeed);
@@ -222,25 +223,22 @@ namespace KerbalWeatherRadar
                 }
             }
 
-            if (isOn)
+            float maxRange = isLongRange ? longRange : shortRange;
+            float verticalAngle = isLongRange ? highRangeAngle : lowRangeAngle;
+            float delta = Mathf.DeltaAngle(lastDrawAngle, currentSweepAngle);
+
+            int stepsToDraw = Mathf.Max(1, Mathf.CeilToInt(Mathf.Abs(delta) / sweepResolution));
+            if (stepsToDraw > 180) stepsToDraw = 1;
+
+            if (stepsToDraw > 0)
             {
-                float maxRange = isLongRange ? longRange : shortRange;
-                float verticalAngle = isLongRange ? highRangeAngle : lowRangeAngle;
-                float delta = Mathf.DeltaAngle(lastDrawAngle, currentSweepAngle);
-
-                int stepsToDraw = Mathf.Max(1, Mathf.CeilToInt(Mathf.Abs(delta) / sweepResolution));
-                if (stepsToDraw > 180) stepsToDraw = 1;
-
-                if (stepsToDraw > 0)
+                // sample volumes once per drawing phase to remove GC hits
+                UpdateDensities(currentSweepAngle, maxRange, verticalAngle, radarSteps);
+                for (int i = 1; i <= stepsToDraw; i++)
                 {
-                    // sample volumes once per drawing phase to remove GC hits
-                    UpdateDensities(currentSweepAngle, maxRange, verticalAngle, radarSteps);
-                    for (int i = 1; i <= stepsToDraw; i++)
-                    {
-                        float a = lastDrawAngle + (delta * (i / (float)stepsToDraw));
-                        a = Mathf.Repeat(a, 360f);
-                        DrawSweepLine(a);
-                    }
+                    float a = lastDrawAngle + (delta * (i / (float)stepsToDraw));
+                    a = Mathf.Repeat(a, 360f);
+                    DrawSweepLine(a);
                 }
             }
 
@@ -294,8 +292,8 @@ namespace KerbalWeatherRadar
 
             // CHEAP AND CHEERFUL FIX: Disable beams near the ground to avoid terrain clipping
             double currentAlt = v.altitude;
-            bool enableHoriz = currentAlt >= 2000.0;
-            bool enableDown = currentAlt >= 3000.0;
+            bool enableHoriz = currentAlt >= cutoffHorizAlt;
+            bool enableDown = currentAlt >= cutoffDownAlt;
 
             for (int i = 0; i < numSteps; i++)
             {
@@ -357,7 +355,7 @@ namespace KerbalWeatherRadar
                 Color32 targetColor;
                 if (dens > radarThreshold)
                 {
-                    float displayDens = Mathf.Clamp01(dens * colorMultiplier);
+                    float displayDens = Mathf.Clamp01(dens * currentColorMultiplier);
                     byte cr = (byte)Mathf.Clamp(displayDens * 510f, 0f, 255f);
                     byte cg = (byte)Mathf.Clamp(510f - displayDens * 510f, 0f, 255f);
                     targetColor = new Color32(cr, cg, 0, 255);
@@ -434,11 +432,25 @@ namespace KerbalWeatherRadar
             string longLabel = (longRange / 1000f).ToString("0") + "km";
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button(isOn ? "PWR: ON" : "PWR: OFF"))
+
+            // Lazy initialization of our text-format friendly button style to prevent unnecessary garbage collection per frame
+            if (richButtonStyle == null)
             {
-                isOn = !isOn;
-                ClearScreen();
+                richButtonStyle = new GUIStyle(GUI.skin.button) { richText = true };
             }
+
+            string gainText = "<color=orange>GAIN: MED</color>";
+            if (gainState == 1) gainText = "<color=red>GAIN: HI</color>";
+            else if (gainState == 2) gainText = "<color=green>GAIN: LO</color>";
+
+            if (GUILayout.Button(gainText, richButtonStyle))
+            {
+                gainState = (gainState + 1) % 3;
+                if (gainState == 0) currentColorMultiplier = baseColorMultiplier;
+                else if (gainState == 1) currentColorMultiplier = baseColorMultiplier + 0.5f;
+                else if (gainState == 2) currentColorMultiplier = Mathf.Max(0f, baseColorMultiplier - 0.5f);
+            }
+
             if (GUILayout.Button(isGlobalMode ? "MODE: 360" : "MODE: FWD"))
             {
                 isGlobalMode = !isGlobalMode;
